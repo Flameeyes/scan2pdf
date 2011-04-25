@@ -1,0 +1,332 @@
+#!/usr/bin/env ruby
+# -*- mode: ruby; coding: utf-8 -*-
+#
+# scan2pdf -- scan documents and convert to PDF
+# Copyright © 2011 Diego E. "Flameeyes" Pettenò <flameeyes@gmail.com>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+require 'optparse'
+require 'tempfile'
+require 'fileutils'
+require 'posix/spawn'
+
+include POSIX::Spawn
+
+ORIGINAL_PWD=Dir.pwd
+
+MODES = ['gray', 'color', 'lineart']
+MODES_ALIASES = {
+  'grey' => 'gray',
+  'colour' => 'color',
+  'binary' => 'lineart',
+}
+
+RESOLUTION_ALIASES = {
+  'document' => 200,
+  'print' => 300,
+  'fine' => 600
+}
+
+SIZE_ALIASES = {
+  'a4' => '210x296.926', # some scanners are slightly smaller :(
+  'a5' => '148x210',
+  'letter' => '215.9x279.4',
+}
+
+DUPLEX = ['auto', 'manual', 'best']
+
+options_set = {
+  :output => ["-o", "--output FILE", "Save output to file"],
+  :pages => ["-p", "--pages NUMBER", OptionParser::DecimalInteger, "Scan NUMBER pages per document"],
+  :documents => ["-n", "--documents NUMBER", OptionParser::DecimalInteger, "Scan NUMBER documents"],
+  :resolution => ["-r", "--resolution DPI", OptionParser::DecimalInteger, RESOLUTION_ALIASES, "Scan at [DPI] dots per inch"],
+  :mode => ["-m", "--mode MODE", MODES, MODES_ALIASES, "Select scan mode"],
+  :size => ["-s", "--size SIZE", SIZE_ALIASES, "Area to scan"],
+  :rotate => ["-R", "--rotate DEGREES", OptionParser::DecimalInteger, "Rotate the scan by DEGREES"],
+  :force => ["-f", "--force", "Force overwriting destination"],
+  :adf => ["-A", "--adf", "Use the Auto Document Feeder"],
+  :duplex => ["-D", "--duplex [auto|manual|best]", DUPLEX, "Scan both sides of pages"],
+  :blank => ["-b", "--blank", "Ignore the final blank page of the document"],
+  :continuous => ["-C", "--continuous", "Scan countinuously until interrupted"],
+  :fax => ["-F", "--fax", "Produce PDF ready for faxing (G3 encoding)"],
+  :unpaper => ["-U", "--no-run-unpaper", "Execute unpaper on the scanned images"],
+  :device => ["-d", "--device DEVICE", "Scan from the given device"],
+  :center => ["-c", "--center-scan", "Apply offset, align scanned document with center"],
+}
+
+options = {
+  :rotate => 0,
+  :pages => -1,
+  :documents => 1,
+  :mode => 'lineart',
+  :unpaper => true,
+  :size => '210x296.926',
+}
+
+OptionParser.new do |opts|
+  opts.banner = "Usage: scan2pdf.rb [options]"
+
+  options_set.each_pair do |key, params|
+    opts.on(*params) do |arg|
+      options[key] = arg
+    end
+  end
+end.parse!
+
+def puterror(msg)
+  $stderr.puts "#{File.basename($0)}: #{msg}"
+end
+
+options[:output] ||= sprintf("scan2pdf-%08x.pdf",
+                             rand(0x100000000))
+
+if File.exists?( options[:output] ) and not options[:force]
+  puterror "file exists"
+  exit 2
+end
+
+if options[:documents] > 1
+  options[:output] = "#{Dir::pwd}/#{options[:output].sub(/\.pdf$/, '')}-%03d.pdf"
+else
+  options[:output] = "#{Dir::pwd}/#{options[:output]}"
+end
+
+# if the user didn't choose a device already, ask sane which ones are
+# available and take the first one in the list.
+options[:device] ||= `scanimage --formatted-device-list='%d '`.split()[0]
+
+# make sure that if the user only provided --duplex, it gets seen as
+# --duplex=best
+options[:duplex] ||= "best" if options.has_key? :duplex
+
+scanimage_params = [
+                    "--buffer-size=1024",
+                    "--format=pnm",
+                    "--batch=raw%03d",
+                    "--device-name=#{options[:device]}",
+                    "--resolution=#{options[:resolution]}",
+                    ]
+unpaper_params = [
+                  "--layout", "single",
+                  "--dpi", options[:resolution],
+                 ]
+pnmtotiff_params = [
+                    "-xresolution", options[:resolution],
+                    "-yresolution", options[:resolution],
+                   ]
+tiff2pdf_params = []
+
+scanimage_available_options = {}
+si_opts_re = /^\s+(--[\w-]+|-[a-z])\s+([\w .|]+)\s+\[([\w .]+)\]$/
+`scanimage -d '#{options[:device]}' -A`.split("\n").each do |line|
+
+  if res = si_opts_re.match(line)
+    next if res[3] == "inactive"
+    scanimage_available_options[res[1]] = res[2].split("|")
+  end
+end
+
+scanimage_params << "--compression=None" if scanimage_available_options.has_key?("--compression")
+
+if options[:adf]
+  if scanimage_available_options.has_key?("--source")
+    if scanimage_available_options["--source"].include?("ADF")
+      scanimage_params << "--source=ADF"
+    else
+      puterror "device does not support ADF"
+      exit 3
+    end
+  end
+
+  if scanimage_available_options.has_key?("--adf-mode")
+    if options[:duplex] == "auto" or options[:duplex] == "best"
+      options[:duplex] = "auto"
+      scanimage_params << "--adf-mode=Duplex"
+    else
+      scanimage_params << "--adf-mode=Simplex"
+    end
+  else
+    if options[:duplex] == "auto"
+      puterror "device does not support automatic duplex"
+      exit 4
+    end
+
+    options[:duplex] = "manual" if options[:duplex]
+  end
+else
+  scanimage_params << "--batch-prompt"
+end
+
+available_modes = scanimage_available_options["--mode"].collect { |x| x.downcase }
+case options[:mode]
+when /lineart/i
+  tiff2pdf_params << "-z"
+  if available_modes.include?("lineart")
+    scanimage_params << "--mode=lineart"
+  elsif available_modes.include?("binary")
+    scanimage_params << "--mode=binary"
+  else
+    puterror "device does not support selected mode"
+    exit 5
+  end
+when /gray/i
+  if available_modes.include?("gray")
+    scanimage_params << "--mode=gray"
+  else
+    puterror "device does not support selected mode"
+    exit 5
+  end
+when /color/i
+  if available_modes.include?("color")
+    scanimage_params << "--mode=color"
+  else
+    puterror "device does not support selected mode"
+    exit 5
+  end
+end
+
+scanimage_available_options["-x"][0] =~ /0\.\.([0-9.]+)mm/
+max_scan_width = $1.to_f
+scanimage_available_options["-y"][0] =~ /0\.\.([0-9.]+)mm/
+max_scan_height = $1.to_f
+
+if not options[:size] =~ /([0-9]+(\.[0-9]+)?)x([0-9]+(\.[0-9]+)?)/
+  puterror "invalid size requested"
+  exit 6
+end
+
+scan_width = $1.to_f
+scan_height = $3.to_f
+
+if scan_width > max_scan_width or scan_height > max_scan_height
+  puterror "size outside of maximum scan area"
+  exit 7
+end
+
+scanimage_params << "-x #{scan_width}" << "-y #{scan_height}"
+unpaper_params << "--size" << "#{scan_width.to_i}mm,#{scan_height.to_i}mm"
+
+if options[:center]
+  offset = (max_scan_width - scan_width)/2
+  scanimage_params << "-l #{offset}" if offset > 0
+end
+
+tmpdir = sprintf("%s/scan2pdf-%08x",
+                 Dir::tmpdir,
+                 rand(0x100000000))
+Dir.mkdir(tmpdir)
+
+at_exit do
+  FileUtils.rm_r(tmpdir)
+end
+
+Dir.chdir(tmpdir)
+
+def last_scanned_page
+  Dir["raw"].sort()[-1] =~ /.*\/raw([0-9]{3})/
+  return $1.to_i
+end
+
+if options[:duplex] == "manual"
+  if options[:pages]
+    even_pages = (options[:pages]*options[:documents])/2
+    odd_pages = (options[:pages]*options[:documents])-even_pages
+  else
+    odd_pages = -1
+  end
+
+  puts "Scanning odd side"
+  result = system("scanimage", "--batch-increment=2", "--batch-start=1",
+                  "--batch-count=#{odd_pages}", scanimage_params)
+  if not result and options[:patches] != -1
+    puterror "scanimage failed (#{status})"
+    exit 8
+  end
+
+  puts "Press Enter to scan even side"
+  gets
+
+  even_pages ||= (last_scanned_page()+1)/2
+
+  if not system("scanimage", "--batch-increment=-2", "--batch-start=#{last_scanned_page()+1}",
+                "--batch-start=#{even_pages*2}", "--batch-count=#{even_pages}", scanimage_params)
+    puterror "scanimage failed (#{status})"
+    exit 8
+  end
+else
+  result = system("scanimage", "--batch-start=1", "--batch-count=#{options[:pages]*options[:documents]}",
+                  *scanimage_params)
+  if not result and options[:paages] != -1
+    puterror "scanimage failed (#{status})"
+    exit 8
+  end
+end
+
+options[:pages] = last_scanned_page if options[:pages] <= 0
+
+if options[:documents] and options[:blank]
+  File.rm(options[:documents].times.collect { |x| "raw%03d" % (x*options[:pages]) })
+end
+
+scanned_pages = Dir["raw*"]
+
+rotation = options[:rotate].to_i % 360
+
+scanned_pages.each do |page|
+  Process.fork do
+    at_exit { exit! }
+
+    page = page.sub('raw', '')
+    step = "raw"
+
+    if rotation != 0
+      system("convert", "#{step}#{page}", "-rotate", rotation, "rotated#{page}")
+      step = "rotated"
+    end
+
+    if options[:unpaper]
+      system("unpaper", unpaper_params,
+             "#{step}#{page}", "unpapered#{page}")
+      step = "unpapered"
+    end
+
+    system("pnmtotiff", pnmtotiff_params, {
+             :in => ["#{step}#{page}"],
+             :out => ["tiff#{page}"]
+           })
+  end
+end
+
+Process.waitall
+
+options[:documents].times do |doc|
+  Process.fork do
+    at_exit { exit! }
+
+    doc_pages = options[:pages]
+    doc_pages -= 1 if options[:blank]
+
+    doc_start = (options[:pages]*doc)+1
+    doc_end = doc_start + doc_pages -1
+
+    doc_pages = (doc_start..doc_end).collect { |x| "tiff%03d" % x }
+    doctiff = "doc%03d" % (doc+1)
+
+    system("tiffcp", doc_pages, doctiff)
+    system("tiff2pdf", tiff2pdf_params, "-o", options[:output] % (doc+1), doctiff)
+  end
+end
+
+Process.waitall
