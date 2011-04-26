@@ -252,7 +252,7 @@ if options[:duplex] == "manual"
   result = system("scanimage", "--batch-increment=2", "--batch-start=1",
                   "--batch-count=#{odd_pages}", scanimage_params)
   if not result and options[:patches] != -1
-    puterror "scanimage failed (#{status})"
+    puterror "scanimage failed"
     exit 8
   end
 
@@ -263,14 +263,14 @@ if options[:duplex] == "manual"
 
   if not system("scanimage", "--batch-increment=-2", "--batch-start=#{last_scanned_page()+1}",
                 "--batch-start=#{even_pages*2}", "--batch-count=#{even_pages}", scanimage_params)
-    puterror "scanimage failed (#{status})"
+    puterror "scanimage failed"
     exit 8
   end
 else
   result = system("scanimage", "--batch-start=1", "--batch-count=#{options[:pages]*options[:documents]}",
                   *scanimage_params)
   if not result and options[:paages] != -1
-    puterror "scanimage failed (#{status})"
+    puterror "scanimage failed"
     exit 8
   end
 end
