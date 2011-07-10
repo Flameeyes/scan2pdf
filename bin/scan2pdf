@@ -258,8 +258,8 @@ end
 Dir.chdir(tmpdir)
 
 def last_scanned_page
-  Dir["raw"].sort()[-1] =~ /.*\/raw([0-9]{3})/
-  return $1.to_i
+  Dir["raw*"].sort()[-1] =~ /(.*\/)?raw([0-9]{3})/
+  return $2.to_i
 end
 
 if options[:duplex] == "manual"
@@ -273,7 +273,7 @@ if options[:duplex] == "manual"
   puts "Scanning odd side"
   result = system("scanimage", "--batch-increment=2", "--batch-start=1",
                   "--batch-count=#{odd_pages}", scanimage_params)
-  if not result and options[:patches] != -1
+  if not result and options[:pages] != -1
     puterror "scanimage failed"
     exit 8
   end
@@ -291,7 +291,7 @@ if options[:duplex] == "manual"
 else
   result = system("scanimage", "--batch-start=1", "--batch-count=#{options[:pages]*options[:documents]}",
                   *scanimage_params)
-  if not result and options[:paages] != -1
+  if not result and options[:pages] != -1
     puterror "scanimage failed"
     exit 8
   end
