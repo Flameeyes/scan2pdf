@@ -303,7 +303,7 @@ end
 options[:pages] = last_scanned_page if options[:pages] <= 0
 
 if options[:documents] and options[:blank]
-  File.rm(options[:documents].times.collect { |x| "raw%03d" % (x*options[:pages]) })
+  FileUtils.rm(options[:documents].times.collect { |x| "raw%03d" % ((x+1)*options[:pages]) })
 end
 
 scanned_pages = Dir["raw*"]
