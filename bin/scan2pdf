@@ -96,7 +96,7 @@ options = {
   :mode => 'lineart',
   :unpaper => true,
   :size => '210x296.926',
-  :resolution => 200
+  :resolution => 300
 }
 
 OptionParser.new do |opts|
