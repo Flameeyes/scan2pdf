@@ -68,6 +68,7 @@ SIZE_ALIASES = {
 }
 
 DUPLEX = ['auto', 'manual', 'best']
+LAYOUT = ['single', 'double', 'double-folded']
 
 options_set = {
   :output => ["-o", "--output FILE", "Save output to file"],
@@ -75,7 +76,8 @@ options_set = {
   :documents => ["-n", "--documents NUMBER", OptionParser::DecimalInteger, "Scan NUMBER documents"],
   :resolution => ["-r", "--resolution DPI", OptionParser::DecimalInteger, RESOLUTION_ALIASES, "Scan at [DPI] dots per inch"],
   :mode => ["-m", "--mode MODE", MODES, MODES_ALIASES, "Select scan mode"],
-  :size => ["-s", "--size SIZE", SIZE_ALIASES, "Area to scan"],
+  :size_name => ["-s", "--size-name SIZE", SIZE_ALIASES, "Area to scan (format name)"],
+  :size => ["-S", "--size SIZE", "Area to scan (in mm)"],
   :rotate => ["-R", "--rotate DEGREES", OptionParser::DecimalInteger, "Rotate the scan by DEGREES"],
   :force => ["-f", "--force", "Force overwriting destination"],
   :adf => ["-A", "--adf", "Use the Auto Document Feeder"],
@@ -87,6 +89,8 @@ options_set = {
   :device => ["-d", "--device DEVICE", "Scan from the given device"],
   :center => ["-c", "--center-scan", "Apply offset, align scanned document with center"],
   :voffset => ["-V", "--vertical-offset NUMBER", OptionParser::DecimalInteger, "Vertical offset (in mm)"],
+  :fold => ["-l", "--folded", "Scan a folded document (1-4, pause, 2-3)"],
+  :layout => ["-L", "--layout LAYOUT", LAYOUT, "Select scan layout (single or double)"],
 }
 
 options = {
@@ -95,8 +99,9 @@ options = {
   :documents => 1,
   :mode => 'lineart',
   :unpaper => true,
-  :size => '210x296.926',
-  :resolution => 300
+  :size_name => '210x296.926',
+  :resolution => 300,
+  :layout => 'single',
 }
 
 OptionParser.new do |opts|
@@ -143,7 +148,6 @@ scanimage_params = [
                     "--resolution=#{options[:resolution]}",
                     ]
 unpaper_params = [
-                  "--layout", "single",
                   "--dpi", options[:resolution],
                  ]
 pnmtotiff_params = [
@@ -226,21 +230,40 @@ max_scan_width = $1.to_f
 scanimage_available_options["-y"][0] =~ /0\.\.([0-9.]+)mm/
 max_scan_height = $1.to_f
 
+options[:size] ||= options[:size_name]
+
 if not options[:size] =~ /([0-9]+(\.[0-9]+)?)x([0-9]+(\.[0-9]+)?)/
   puterror "invalid size requested"
   exit 6
 end
 
-scan_width = $1.to_f
-scan_height = $3.to_f
+case options[:layout]
+when 'single'
+  scan_width = $1.to_f
+  scan_height = $3.to_f
+
+  unpaper_params << "--layout" << "single"
+  unpaper_params << "--size" << "#{scan_width.to_i}mm,#{scan_height.to_i}mm"
+when 'double', 'double-folded'
+  page_width = $1.to_f
+  page_height = $3.to_f
+
+  scan_width = page_height
+  scan_height = page_width * 2
+
+  unpaper_params << "--layout" << "double"
+  unpaper_params << "--output-pages" << "2"
+  unpaper_params << "--size" << "#{scan_height.to_i}mm,#{scan_width.to_i}mm"
+else
+  puterror "invalid --layout value: #{options[:layout]}"
+end
 
 if scan_width > max_scan_width or scan_height > max_scan_height
-  puterror "size outside of maximum scan area"
+  puterror "size outside of maximum scan area (#{scan_width}x#{scan_height} vs #{max_scan_width}x#{max_scan_height})"
   exit 7
 end
 
 scanimage_params << "-x #{scan_width}" << "-y #{scan_height}"
-unpaper_params << "--size" << "#{scan_width.to_i}mm,#{scan_height.to_i}mm"
 
 if options[:center]
   offset = (max_scan_width - scan_width)/2
@@ -263,6 +286,11 @@ Dir.chdir(tmpdir)
 def last_scanned_page
   Dir["raw*"].sort()[-1] =~ /(.*\/)?raw([0-9]{3})/
   return $2.to_i
+end
+
+def pause
+  $stdout.puts "Press ENTER to continue."
+  $stdin.gets
 end
 
 if options[:duplex] == "manual"
@@ -291,6 +319,21 @@ if options[:duplex] == "manual"
     puterror "scanimage failed"
     exit 8
   end
+elsif options[:fold]
+  if options[:pages] % 4 != 0
+    puterror "Folded scan only works in four pages increments"
+    exit 9
+  end
+
+  sheets = (options[:pages] / 4) * options[:documents]
+  sheets.times do |i|
+    system("scanimage", "--batch-start=#{i*4+1}", "--batch-increment=3", "--batch-count=2",
+           *scanimage_params)
+    pause
+    system("scanimage", "--batch-start=#{i*4+2}", "--batch-increment=1", "--batch-count=2",
+           *scanimage_params)
+    pause
+  end
 else
   result = system("scanimage", "--batch-start=1", "--batch-count=#{options[:pages]*options[:documents]}",
                   *scanimage_params)
@@ -309,6 +352,7 @@ end
 scanned_pages = Dir["raw*"]
 
 rotation = options[:rotate].to_i % 360
+double_layout = (options[:layout] =~ /^double(-folded)?/) != nil
 
 scanned_pages.each do |page|
   Process.fork do
@@ -323,19 +367,64 @@ scanned_pages.each do |page|
     end
 
     if options[:unpaper]
-      system("unpaper", unpaper_params,
-             "#{step}#{page}", "unpapered#{page}")
+      my_unpaper_params = unpaper_params.dup
+
+      if double_layout
+        case page.to_i % 2
+        when 1
+          my_unpaper_params << "--pre-rotate" << "90"
+        when 0
+          my_unpaper_params << "--pre-rotate" << "-90"
+        end
+      end
+
+      system("unpaper", my_unpaper_params,
+             "#{step}#{page}", "unpapered#{page}-%1d")
       step = "unpapered"
     end
 
-    system("pnmtotiff", pnmtotiff_params, {
-             :in => ["#{step}#{page}"],
-             :out => ["tiff#{page}"]
-           })
+    case options[:layout]
+    when "single"
+      system("pnmtotiff", pnmtotiff_params, {
+               :in => ["#{step}#{page}-1"],
+               :out => ["tiff#{page}"]
+             })
+    when "double"
+      system("pnmtotiff", pnmtotiff_params, {
+               :in => ["#{step}#{page}-1"],
+               :out => [sprintf("tiff%03d", (page.to_i-1)*2+1)]
+             })
+      system("pnmtotiff", pnmtotiff_params, {
+               :in => ["#{step}#{page}-2"],
+               :out => [sprintf("tiff%03d", (page.to_i-1)*2+2)]
+             })
+    when "double-folded"
+      case page.to_i % 2
+      when 1
+        first =  (page.to_i-1)*4 + 4
+        second = (page.to_i-1)*4 + 1
+      when 0
+        first =  (page.to_i-2)*4 + 2
+        second = (page.to_i-2)*4 + 3
+      end
+
+      system("pnmtotiff", pnmtotiff_params, {
+               :in => ["#{step}#{page}-1"],
+               :out => [sprintf("tiff%03d", first)]
+             })
+      system("pnmtotiff", pnmtotiff_params, {
+               :in => ["#{step}#{page}-2"],
+               :out => [sprintf("tiff%03d", second)]
+             })
+    end
   end
 end
 
 Process.waitall
+
+# double the number of pages after they have been passed through
+# unpaper
+options[:pages] = options[:pages]*2 if double_layout
 
 options[:documents].times do |doc|
   Process.fork do
