@@ -386,7 +386,7 @@ scanned_pages.each do |page|
     case options[:layout]
     when "single"
       system("pnmtotiff", pnmtotiff_params, {
-               :in => ["#{step}#{page}-1"],
+               :in => ["#{step}#{page}#{'-1' if options[:unpaper]}"],
                :out => ["tiff#{page}"]
              })
     when "double"
