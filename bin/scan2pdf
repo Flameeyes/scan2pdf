@@ -72,6 +72,7 @@ LAYOUT = ['single', 'double', 'double-folded']
 
 options_set = {
   :output => ["-o", "--output FILE", "Save output to file"],
+  :directory => ["-O", "--output-directory", "Save output to single-page files to a directory"],
   :pages => ["-p", "--pages NUMBER", OptionParser::DecimalInteger, "Scan NUMBER pages per document"],
   :documents => ["-n", "--documents NUMBER", OptionParser::DecimalInteger, "Scan NUMBER documents"],
   :resolution => ["-r", "--resolution DPI", OptionParser::DecimalInteger, RESOLUTION_ALIASES, "Scan at [DPI] dots per inch"],
@@ -114,20 +115,31 @@ OptionParser.new do |opts|
   end
 end.parse!
 
-def puterror(msg)
+def puterror(exit_val, msg)
   $stderr.puts "#{File.basename($0)}: #{msg}"
+  exit exit_val
+end
+
+if options[:pages] <= 0 and options[:documents] <= 0
+  puterror 12, "can't have unbound documents with unbound pages"
+end
+
+if options[:pages] % 2 != 0 and options[:blank]
+  puterror 13, "can't remove final blank page on odd-paged documents"
 end
 
 options[:output] ||= sprintf("scan2pdf-%08x.pdf",
                              rand(0x100000000))
 
 if File.exists?( options[:output] ) and not options[:force]
-  puterror "file exists"
-  exit 2
+  puterror 2, "file exists"
 end
 
-if options[:documents] > 1
+if options[:documents] != 1
   options[:output] = "#{Dir::pwd}/#{options[:output].sub(/\.pdf$/, '')}-%03d.pdf"
+elsif options[:directory]
+  Dir::mkdir("#{Dir::pwd}/#{options[:output]}")
+  options[:output] = "#{Dir::pwd}/#{options[:output]}/%03d.pdf"
 else
   options[:output] = "#{Dir::pwd}/#{options[:output]}"
 end
@@ -173,8 +185,7 @@ if options[:adf]
     if scanimage_available_options["--source"].include?("ADF")
       scanimage_params << "--source=ADF"
     else
-      puterror "device does not support ADF"
-      exit 3
+      puterror 3, "device does not support ADF"
     end
   end
 
@@ -187,8 +198,7 @@ if options[:adf]
     end
   else
     if options[:duplex] == "auto"
-      puterror "device does not support automatic duplex"
-      exit 4
+      puterror 4, "device does not support automatic duplex"
     end
 
     options[:duplex] = "manual" if options[:duplex]
@@ -206,35 +216,37 @@ when /lineart/i
   elsif available_modes.include?("binary")
     scanimage_params << "--mode=binary"
   else
-    puterror "device does not support selected mode"
-    exit 5
+    puterror 5, "device does not support selected mode"
   end
 when /gray/i
   if available_modes.include?("gray")
     scanimage_params << "--mode=gray"
   else
-    puterror "device does not support selected mode"
-    exit 5
+    puterror 5, "device does not support selected mode"
   end
 when /color/i
   if available_modes.include?("color")
     scanimage_params << "--mode=color"
   else
-    puterror "device does not support selected mode"
-    exit 5
+    puterror 5, "device does not support selected mode"
   end
 end
 
-scanimage_available_options["-x"][0] =~ /0\.\.([0-9.]+)mm/
+if scanimage_available_options["-x"][0] == "auto"
+  max_scan_sizes_index = 1
+else
+  max_scan_sizes_index = 0
+end
+
+scanimage_available_options["-x"][max_scan_sizes_index] =~ /0\.\.([0-9.]+)mm/
 max_scan_width = $1.to_f
-scanimage_available_options["-y"][0] =~ /0\.\.([0-9.]+)mm/
+scanimage_available_options["-y"][max_scan_sizes_index] =~ /0\.\.([0-9.]+)mm/
 max_scan_height = $1.to_f
 
 options[:size] ||= options[:size_name]
 
 if not options[:size] =~ /([0-9]+(\.[0-9]+)?)x([0-9]+(\.[0-9]+)?)/
-  puterror "invalid size requested"
-  exit 6
+  puterror 6, "invalid size requested"
 end
 
 case options[:layout]
@@ -255,12 +267,11 @@ when 'double', 'double-folded'
   unpaper_params << "--output-pages" << "2"
   unpaper_params << "--size" << "#{scan_height.to_i}mm,#{scan_width.to_i}mm"
 else
-  puterror "invalid --layout value: #{options[:layout]}"
+  puterror 8, "invalid --layout value: #{options[:layout]}"
 end
 
 if scan_width > max_scan_width or scan_height > max_scan_height
-  puterror "size outside of maximum scan area (#{scan_width}x#{scan_height} vs #{max_scan_width}x#{max_scan_height})"
-  exit 7
+  puterror 9, "size outside of maximum scan area (#{scan_width}x#{scan_height} vs #{max_scan_width}x#{max_scan_height})"
 end
 
 scanimage_params << "-x #{scan_width}" << "-y #{scan_height}"
@@ -305,8 +316,7 @@ if options[:duplex] == "manual"
   result = system("scanimage", "--batch-increment=2", "--batch-start=1",
                   "--batch-count=#{odd_pages}", scanimage_params)
   if not result and options[:pages] != -1
-    puterror "scanimage failed"
-    exit 8
+    puterror 10, "scanimage failed"
   end
 
   puts "Press Enter to scan even side"
@@ -316,13 +326,11 @@ if options[:duplex] == "manual"
 
   if not system("scanimage", "--batch-increment=-2", "--batch-start=#{last_scanned_page()+1}",
                 "--batch-start=#{even_pages*2}", "--batch-count=#{even_pages}", scanimage_params)
-    puterror "scanimage failed"
-    exit 8
+    puterror 10, "scanimage failed"
   end
 elsif options[:fold]
   if options[:pages] % 4 != 0
-    puterror "Folded scan only works in four pages increments"
-    exit 9
+    puterror 11, "Folded scan only works in four pages increments"
   end
 
   sheets = (options[:pages] / 4) * options[:documents]
@@ -335,15 +343,23 @@ elsif options[:fold]
     pause
   end
 else
-  result = system("scanimage", "--batch-start=1", "--batch-count=#{options[:pages]*options[:documents]}",
+  scanpages = options[:pages] * options[:documents]
+
+  result = system("scanimage", "--batch-start=1", "--batch-count=#{scanpages}",
                   *scanimage_params)
-  if not result and options[:pages] != -1
-    puterror "scanimage failed"
-    exit 8
+  if not result and scanpages >= 1
+    puterror 10, "scanimage failed"
   end
 end
 
-options[:pages] = last_scanned_page if options[:pages] <= 0
+if options[:pages] <= 0
+  options[:pages] = last_scanned_page
+elsif options[:documents] <= 0
+  options[:documents] = last_scanned_page/options[:pages]
+elsif options[:directory] and options[:documents] == 1
+  options[:documents] = options[:pages]
+  options[:pages] = 1
+end
 
 if options[:documents] and options[:blank]
   FileUtils.rm(options[:documents].times.collect { |x| "raw%03d" % ((x+1)*options[:pages]) })
