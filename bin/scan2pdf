@@ -161,7 +161,7 @@ scanimage_params = [
                     ]
 unpaper_params = [
                   "--dpi", options[:resolution],
-                  "--no-mask-center",
+                  "--no-mask-center", "--no-mask-scan"
                  ]
 pnmtotiff_params = [
                     "-xresolution", options[:resolution],
