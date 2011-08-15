@@ -161,12 +161,15 @@ scanimage_params = [
                     ]
 unpaper_params = [
                   "--dpi", options[:resolution],
+                  "--no-mask-center",
                  ]
 pnmtotiff_params = [
                     "-xresolution", options[:resolution],
                     "-yresolution", options[:resolution],
                    ]
 tiff2pdf_params = []
+
+unpaper_params << "--no-processing" unless options[:unpaper]
 
 scanimage_available_options = {}
 si_opts_re = /^\s+(--[\w-]+|-[a-z])\s+([\w .|]+)\s+\[([\w .]+)\]$/
@@ -382,27 +385,25 @@ scanned_pages.each do |page|
       step = "rotated"
     end
 
-    if options[:unpaper]
-      my_unpaper_params = unpaper_params.dup
+    my_unpaper_params = unpaper_params.dup
 
-      if double_layout
-        case page.to_i % 2
-        when 1
-          my_unpaper_params << "--pre-rotate" << "90"
-        when 0
-          my_unpaper_params << "--pre-rotate" << "-90"
-        end
+    if double_layout
+      case page.to_i % 2
+      when 1
+        my_unpaper_params << "--pre-rotate" << "90"
+      when 0
+        my_unpaper_params << "--pre-rotate" << "-90"
       end
-
-      system("unpaper", my_unpaper_params,
-             "#{step}#{page}", "unpapered#{page}-%1d")
-      step = "unpapered"
     end
+
+    system("unpaper", my_unpaper_params,
+           "#{step}#{page}", "unpapered#{page}-%1d")
+    step = "unpapered"
 
     case options[:layout]
     when "single"
       system("pnmtotiff", pnmtotiff_params, {
-               :in => ["#{step}#{page}#{'-1' if options[:unpaper]}"],
+               :in => ["#{step}#{page}-1"],
                :out => ["tiff#{page}"]
              })
     when "double"
