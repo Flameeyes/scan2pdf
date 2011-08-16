@@ -63,6 +63,7 @@ RESOLUTION_ALIASES = {
 
 SIZE_ALIASES = {
   'a4' => '210x296.926', # some scanners are slightly smaller :(
+  'a5-landscape' => '210x148',
   'a5' => '148x210',
   'letter' => '215.9x279.4',
 }
