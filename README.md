@@ -13,7 +13,8 @@ Prerequisites
  - libtiff utilities
  - netpbm
  - ImageMagick or GraphicsMagick
- - unpaper
+ - unpaper[3]
 
 [1] http://www.sane-project.org/
 [2] https://github.com/rtomayko/posix-spawn/
+[3] https://github.com/Flameeyes/unpaper/
