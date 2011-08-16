@@ -465,8 +465,11 @@ options[:documents].times do |doc|
     doc_pages = (doc_start..doc_end).collect { |x| "tiff%03d" % x }
     doctiff = "doc%03d" % (doc+1)
 
+    docpdf = options[:output] % (doc+1)
+
     system("tiffcp", doc_pages, doctiff)
-    system("tiff2pdf", tiff2pdf_params, "-o", options[:output] % (doc+1), doctiff)
+    system("tiff2pdf", tiff2pdf_params, "-o", docpdf, doctiff)
+    $stdout.puts "scan2pdf: #{docpdf} created"
   end
 end
 
