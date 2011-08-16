@@ -8,13 +8,9 @@ device into one or more PDF documents.
 Prerequisites
 -------------
 
- - sane-backends[1] >= 1.0.22 (for scanimage -A)
- - posix-spawn[2] (tested with 0.3.6)
+ - [sane-backends](http://www.sane-project.org/) >= 1.0.22 (for scanimage -A)
+ - [posix-spawn](https://github.com/rtomayko/posix-spawn/) (tested with 0.3.6)
  - libtiff utilities
  - netpbm
  - ImageMagick or GraphicsMagick
- - unpaper[3]
-
-[1] http://www.sane-project.org/
-[2] https://github.com/rtomayko/posix-spawn/
-[3] https://github.com/Flameeyes/unpaper/
+ - [unpaper](https://github.com/Flameeyes/unpaper/)
