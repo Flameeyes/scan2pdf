@@ -173,12 +173,11 @@ tiff2pdf_params = []
 unpaper_params << "--no-processing" unless options[:unpaper]
 
 scanimage_available_options = {}
-si_opts_re = /^\s+(--[\w-]+|-[a-z])\s+([\w .|]+)\s+\[([\w .]+)\]$/
+si_opts_re = /^\s+(--[\w-]+|-[a-z])(\s+|\[=\()([\w .|]+)(\)\])?\s+\[([\w .]+)\]$/
 `scanimage -d '#{options[:device]}' -A`.split("\n").each do |line|
-
   if res = si_opts_re.match(line)
-    next if res[3] == "inactive"
-    scanimage_available_options[res[1]] = res[2].split("|")
+    next if res[5] == "inactive"
+    scanimage_available_options[res[1]] = res[3].split("|")
   end
 end
 
@@ -191,6 +190,10 @@ if options[:adf]
     else
       puterror 3, "device does not support ADF"
     end
+  end
+
+  if scanimage_available_options.has_key?("--adf-auto-scan")
+    scanimage_params << "--adf-auto-scan=yes"
   end
 
   if scanimage_available_options.has_key?("--adf-mode")
