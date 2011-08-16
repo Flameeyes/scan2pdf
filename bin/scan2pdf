@@ -162,7 +162,8 @@ scanimage_params = [
                     ]
 unpaper_params = [
                   "--dpi", options[:resolution],
-                  "--no-mask-center", "--no-mask-scan"
+                  "--no-mask-center", "--no-border-align",
+                  "--no-mask-scan"
                  ]
 pnmtotiff_params = [
                     "-xresolution", options[:resolution],
@@ -231,12 +232,16 @@ when /gray/i
   else
     puterror 5, "device does not support selected mode"
   end
+
+  unpaper_params << "--no-wipe"
 when /color/i
   if available_modes.include?("color")
     scanimage_params << "--mode=color"
   else
     puterror 5, "device does not support selected mode"
   end
+
+  unpaper_params << "--no-wipe"
 end
 
 if scanimage_available_options["-x"][0] == "auto"
