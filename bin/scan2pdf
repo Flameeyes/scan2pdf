@@ -55,6 +55,8 @@ MODES_ALIASES = {
   'binary' => 'lineart',
 }
 
+RESOLUTIONS = [ 150, 200, 300, 400, 600, 1200, 1600 ]
+
 RESOLUTION_ALIASES = {
   'document' => 200,
   'print' => 300,
@@ -76,7 +78,7 @@ options_set = {
   :directory => ["-O", "--output-directory", "Save output to single-page files to a directory"],
   :pages => ["-p", "--pages NUMBER", OptionParser::DecimalInteger, "Scan NUMBER pages per document"],
   :documents => ["-n", "--documents NUMBER", OptionParser::DecimalInteger, "Scan NUMBER documents"],
-  :resolution => ["-r", "--resolution DPI", OptionParser::DecimalInteger, RESOLUTION_ALIASES, "Scan at [DPI] dots per inch"],
+  :resolution => ["-r", "--resolution DPI", RESOLUTIONS, RESOLUTION_ALIASES, "Scan at [DPI] dots per inch"],
   :mode => ["-m", "--mode MODE", MODES, MODES_ALIASES, "Select scan mode"],
   :size_name => ["-s", "--size-name SIZE", SIZE_ALIASES, "Area to scan (format name)"],
   :size => ["-S", "--size SIZE", "Area to scan (in mm)"],
