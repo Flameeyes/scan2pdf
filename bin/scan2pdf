@@ -127,8 +127,14 @@ if options[:pages] <= 0 and options[:documents] <= 0
   puterror 12, "can't have unbound documents with unbound pages"
 end
 
-if options[:pages] % 2 != 0 and options[:blank]
-  puterror 13, "can't remove final blank page on odd-paged documents"
+if options[:pages] % 2 != 0
+  if options[:blank]
+    puterror 13, "can't remove final blank page on odd-paged documents"
+  end
+
+  if options.has_key?(:duplex)
+    puterror 13, "can't use duplex scan on odd-paged documents; use -b if you need to."
+  end
 end
 
 options[:output] ||= sprintf("scan2pdf-%08x.pdf",
