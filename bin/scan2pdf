@@ -235,6 +235,8 @@ when /lineart/i
     puterror 5, "device does not support selected mode"
   end
 when /gray/i
+  tiff2pdf_params << "-j"
+
   if available_modes.include?("gray")
     scanimage_params << "--mode=gray"
   else
@@ -243,6 +245,8 @@ when /gray/i
 
   unpaper_params << "--no-wipe"
 when /color/i
+  tiff2pdf_params << "-j"
+
   if available_modes.include?("color")
     scanimage_params << "--mode=color"
   else
