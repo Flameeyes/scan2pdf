@@ -132,7 +132,7 @@ if options[:pages] % 2 != 0
     puterror 13, "can't remove final blank page on odd-paged documents"
   end
 
-  if options.has_key?(:duplex)
+  if options[:pages] != -1 && options.has_key?(:duplex)
     puterror 13, "can't use duplex scan on odd-paged documents; use -b if you need to."
   end
 end
