@@ -46,6 +46,19 @@ rescue Gem::LoadError
   end
 end
 
+# set up empty settings by default, since we can only load them if the
+# inifile gem is installed, and it's not a good idea to firce that.
+settings = {}
+
+begin
+  require 'inifile'
+
+  configfile = File.expand_path("#{ENV['XDG_CONFIG_HOME'] || '~/.config'}/eu.flameeyes.scan2pdf")
+
+  # convert to multi-hash as otherwise it wouldn't respond to has_key?
+  settings = IniFile.new(configfile).to_h if File.exists?(configfile)
+end
+
 ORIGINAL_PWD=Dir.pwd
 
 MODES = ['gray', 'color', 'lineart']
@@ -97,16 +110,7 @@ options_set = {
   :layout => ["-L", "--layout LAYOUT", LAYOUT, "Select scan layout (single or double)"],
 }
 
-options = {
-  :rotate => 0,
-  :pages => -1,
-  :documents => 1,
-  :mode => 'lineart',
-  :unpaper => true,
-  :size_name => '210x296.926',
-  :resolution => 300,
-  :layout => 'single',
-}
+options = {}
 
 OptionParser.new do |opts|
   opts.banner = "Usage: scan2pdf.rb [options]"
@@ -122,6 +126,47 @@ def puterror(exit_val, msg)
   $stderr.puts "#{File.basename($0)}: #{msg}"
   exit exit_val
 end
+
+if options[:device].nil?
+  # check if there is a default device set in the configuration file;
+  # this is handy to avoid using the fully qualified SANE device name
+  # (which includes the USB bus/device address, and is thus variable)
+  if settings.has_key?("defaults") and settings["defaults"].has_key?("device")
+    options[:device] = settings["defaults"]["device"]
+  else
+    # if the user didn't choose a device, ask sane which ones are
+    # available and take the first one reported by scanimage as valid.
+    options[:device] ||= `scanimage --formatted-device-list='%d '`.split()[0]
+  end
+end
+
+# now find out if the user has set any option in the configuration
+# file for that particular device; these options would be overridden
+# by the command line, so only merge it if it's not set already.
+if settings.has_key?(options[:device])
+  settings[options[:device]].each_pair do |key, value|
+    # inifile reads everything as string, so we replace the values
+    # when we want a different type
+    case key
+    when "rotate", "pages", "documents", "resolution"
+      value = value.to_i
+    when "unpaper"
+      value = (value == "true")
+    end
+
+    options[key.to_sym] ||= value
+  end
+end
+
+# and finally set the defaults
+options[:rotate] ||= 0
+options[:pages] ||= -1
+options[:documents] ||= 1
+options[:mode] ||= 'lineart'
+options[:unpaper] ||= true
+options[:size_name] ||= '210x296.926'
+options[:resolution] ||= 300
+options[:layout] ||= 'single'
 
 if options[:pages] <= 0 and options[:documents] <= 0
   puterror 12, "can't have unbound documents with unbound pages"
@@ -152,10 +197,6 @@ elsif options[:directory]
 else
   options[:output] = "#{Dir::pwd}/#{options[:output]}"
 end
-
-# if the user didn't choose a device already, ask sane which ones are
-# available and take the first one in the list.
-options[:device] ||= `scanimage --formatted-device-list='%d '`.split()[0]
 
 # make sure that if the user only provided --duplex, it gets seen as
 # --duplex=best
