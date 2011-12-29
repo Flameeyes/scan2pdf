@@ -223,8 +223,28 @@ tiff2pdf_params = []
 unpaper_params << "--no-processing" unless options[:unpaper]
 
 scanimage_available_options = {}
+
+# scanimage introduced the -A (--all-options) option in version
+# 1.0.22; before that we can't request all the hidden options, so we
+# have to rely on the subset reported by --help instead.
+#
+# Start by getting the version of scanimage; the scanimage --version
+# call will report two versions: the first time it's scanimage's own
+# version, and the second it's the version of the backend library
+# (usually the same); the match will only get the former and that's
+# what we care about.
+#
+# We use Gem::Version to compare the two versions to avoid having to
+# reproduce the logic, which is nasty to read.
+#
+# If we're dealing with older scanimage versions, fallback to the old
+# --help option.
+
+si_version = Gem::Version.new(/\d+\.\d+\.\d+/.match(`scanimage --version`).to_s)
+si_all_options = si_version >= Gem::Version.new("1.0.22") ? "--all-options" : "--help"
+
 si_opts_re = /^\s+(--[\w-]+|-[a-z])(\s+|\[=\()([\w .|]+)(\)\])?\s+\[([\w .]+)\]$/
-`scanimage -d '#{options[:device]}' -A`.split("\n").each do |line|
+`scanimage -d '#{options[:device]}' #{si_all_options}`.split("\n").each do |line|
   if res = si_opts_re.match(line)
     next if res[5] == "inactive"
     scanimage_available_options[res[1]] = res[3].split("|")

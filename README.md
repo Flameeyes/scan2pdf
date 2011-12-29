@@ -8,7 +8,8 @@ device into one or more PDF documents.
 Prerequisites
 -------------
 
- - [sane-backends](http://www.sane-project.org/) >= 1.0.22 (for scanimage -A)
+ - [sane-backends](http://www.sane-project.org/) (>= 1.0.22
+   recommended, for `scanimage -A`)
  - [posix-spawn](https://github.com/rtomayko/posix-spawn/) (tested with 0.3.6)
  - libtiff utilities
  - netpbm (a note for Gentoo users: you need both `tiff` and `jpeg`
