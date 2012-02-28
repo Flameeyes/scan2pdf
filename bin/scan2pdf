@@ -178,7 +178,11 @@ if options[:pages] % 2 != 0
   end
 
   if options[:pages] != -1 && options.has_key?(:duplex)
-    puterror 13, "can't use duplex scan on odd-paged documents; use -b if you need to."
+    if options[:documents] % 2 != 0 || options[:documents] != -1
+      $stderr.puts "warning: you're asking to scan odd-pages documents with duplex, be careful"
+    else
+      puterror 13, "can't use duplex scan on odd-paged documents; use -b if you need to."
+    end
   end
 end
 
