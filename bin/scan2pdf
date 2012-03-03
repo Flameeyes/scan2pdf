@@ -338,13 +338,19 @@ if not options[:size] =~ /([0-9]+(\.[0-9]+)?)x([0-9]+(\.[0-9]+)?)/
   puterror 6, "invalid size requested"
 end
 
+rotation = options[:rotate].to_i % 360
+
 case options[:layout]
 when 'single'
   scan_width = $1.to_f
   scan_height = $3.to_f
 
   unpaper_params << "--layout" << "single"
-  unpaper_params << "--size" << "#{scan_width.to_i}mm,#{scan_height.to_i}mm"
+  if rotation % 90 != 0
+    unpaper_params << "--size" << "#{scan_width.to_i}mm,#{scan_height.to_i}mm"
+  else
+    unpaper_params << "--size" << "#{scan_height.to_i}mm,#{scan_width.to_i}mm"
+  end
 when 'double', 'double-folded'
   page_width = $1.to_f
   page_height = $3.to_f
@@ -456,7 +462,6 @@ end
 
 scanned_pages = Dir["raw*"]
 
-rotation = options[:rotate].to_i % 360
 double_layout = (options[:layout] =~ /^double(-folded)?/) != nil
 
 scanned_pages.each do |page|
