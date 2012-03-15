@@ -346,10 +346,10 @@ when 'single'
   scan_height = $3.to_f
 
   unpaper_params << "--layout" << "single"
-  if rotation % 90 != 0
-    unpaper_params << "--size" << "#{scan_width.to_i}mm,#{scan_height.to_i}mm"
-  else
+  if rotation == 90 || rotation == -90
     unpaper_params << "--size" << "#{scan_height.to_i}mm,#{scan_width.to_i}mm"
+  else
+    unpaper_params << "--size" << "#{scan_width.to_i}mm,#{scan_height.to_i}mm"
   end
 when 'double', 'double-folded'
   page_width = $1.to_f
