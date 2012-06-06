@@ -163,10 +163,12 @@ options[:rotate] ||= 0
 options[:pages] ||= -1
 options[:documents] ||= 1
 options[:mode] ||= 'lineart'
-options[:unpaper] ||= true
 options[:size_name] ||= '210x296.926'
 options[:resolution] ||= 300
 options[:layout] ||= 'single'
+
+# don't use ||= or it'll _always_ run
+options[:unpaper] = true if options[:unpaper].nil?
 
 if options[:pages] <= 0 and options[:documents] <= 0
   puterror 12, "can't have unbound documents with unbound pages"
