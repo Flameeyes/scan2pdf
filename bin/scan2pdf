@@ -47,7 +47,7 @@ rescue Gem::LoadError
 end
 
 # set up empty settings by default, since we can only load them if the
-# inifile gem is installed, and it's not a good idea to firce that.
+# inifile gem is installed, and it's not a good idea to force that.
 settings = {}
 
 begin
@@ -57,6 +57,7 @@ begin
 
   # convert to multi-hash as otherwise it wouldn't respond to has_key?
   settings = IniFile.new(configfile).to_h if File.exists?(configfile)
+rescue LoadError
 end
 
 ORIGINAL_PWD=Dir.pwd
