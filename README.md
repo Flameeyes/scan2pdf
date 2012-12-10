@@ -18,7 +18,7 @@ Prerequisites
    USE flags enabled for the pnm2tiff utility.)
  - ImageMagick or GraphicsMagick
  - [unpaper](https://github.com/Flameeyes/unpaper/)
- - [inifile](https://rubygems.org/gems/inifile) (optional, for
+ - [inifile](https://rubygems.org/gems/inifile) (>= 2, optional, for
    configuration file support.)
 
 The configuration file

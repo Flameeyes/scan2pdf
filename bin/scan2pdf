@@ -51,12 +51,14 @@ end
 settings = {}
 
 begin
+  gem 'inifile', '>= 2'
   require 'inifile'
 
-  configfile = File.expand_path("#{ENV['XDG_CONFIG_HOME'] || '~/.config'}/eu.flameeyes.scan2pdf")
+  cfgfile_path = File.expand_path("#{ENV['XDG_CONFIG_HOME'] || '~/.config'}/eu.flameeyes.scan2pdf")
+  cfgfile_content = File.exists?(cfgfile_path) ? File.read(cfgfile_path) : ''
 
   # convert to multi-hash as otherwise it wouldn't respond to has_key?
-  settings = IniFile.new(configfile).to_h if File.exists?(configfile)
+  settings = IniFile.new(cfgfile_content).to_h
 rescue LoadError
 end
 
