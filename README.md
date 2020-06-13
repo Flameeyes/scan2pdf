@@ -1,10 +1,8 @@
 Flameeyes's scan2pdf
 ====================
 
-[![Flattr this!](http://api.flattr.com/button/flattr-badge-large.png)](https://flattr.com/thing/1059494)
-
-This is a simple script that works as a frontend to scanimage(1) from
-the SANE project[1], to scan a number of pages from a compatible
+This is a simple script that works as a frontend to `scanimage(1)`
+from the SANE project, to scan a number of pages from a compatible
 device into one or more PDF documents.
 
 Prerequisites
@@ -17,7 +15,7 @@ Prerequisites
  - netpbm (a note for Gentoo users: you need both `tiff` and `jpeg`
    USE flags enabled for the pnm2tiff utility.)
  - ImageMagick or GraphicsMagick
- - [unpaper](https://github.com/Flameeyes/unpaper/)
+ - [unpaper](https://flameeyes.com/p/unpaper)
  - [inifile](https://rubygems.org/gems/inifile) (>= 2, optional, for
    configuration file support.)
 
